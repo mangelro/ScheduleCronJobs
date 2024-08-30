@@ -8,21 +8,24 @@
       "sslPort": 44327
     }
   },
+
+
   "profiles": {
     "ScheduleCronJobs": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "launchUrl": "weatherforecast",
+      "launchUrl": "weatherforecast/cron",
       "applicationUrl": "https://localhost:7104;http://localhost:5044",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
+
     "IIS Express": {
       "commandName": "IISExpress",
       "launchBrowser": true,
-      "launchUrl": "weatherforecast",
+      "launchUrl": "weatherforecast/cron",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

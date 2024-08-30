@@ -1,3 +1,5 @@
+using Cronos;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace ScheduleCronJobs.Controllers
@@ -28,6 +30,28 @@ namespace ScheduleCronJobs.Controllers
                 Summary = Summaries[Random.Shared.Next(Summaries.Length)]
             })
             .ToArray();
+        }
+
+
+        [HttpGet("cron")]
+        public IActionResult GetCron(string ex = "* * * * *")
+        {
+
+            var includeSeconds = ex.Split(' ').Length == 6;
+
+            CronExpression expression = CronExpression.Parse(ex, includeSeconds ? CronFormat.IncludeSeconds : CronFormat.Standard);
+
+            DateTime ahora = DateTime.UtcNow;
+
+            IEnumerable<DateTime> occurrences = expression.GetOccurrences(
+                ahora,
+                ahora.AddDays(1),
+                TimeZoneInfo.Local,
+                fromInclusive: false,
+                toInclusive: false);
+
+
+            return Ok(new {Expresion=ex,Ahora= ahora.ToString("s"), occurrences });
         }
     }
 }

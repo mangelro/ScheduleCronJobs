@@ -1,42 +1,75 @@
-﻿
-
-using Cronos;
+﻿using Cronos;
 
 namespace ScheduleCronJobs.Services
 {
-    public abstract class CronJobService : IHostedService, IDisposable
+    public abstract class CronJobService : BackgroundService
     {
         private System.Timers.Timer? _timer;
         private readonly CronExpression _expression;
         private readonly TimeZoneInfo _timeZoneInfo;
         private readonly bool _includeSeconds;
+        private readonly ILogger _logger;
 
-
-        protected CronJobService(string expression, TimeZoneInfo timeZoneInfo, bool includeSeconds)
+        protected CronJobService(string expression, TimeZoneInfo timeZoneInfo, bool includeSeconds, ILogger logger)
         {
-            _expression = CronExpression.Parse(expression ?? throw new ArgumentNullException(nameof(expression)), includeSeconds?CronFormat.IncludeSeconds:CronFormat.Standard);
-            _timeZoneInfo = timeZoneInfo ?? throw new ArgumentNullException(nameof(timeZoneInfo)); ;
-            _includeSeconds= includeSeconds;
-        }
-
-        public virtual Task StartAsync(CancellationToken cancellationToken)
-        {
-            return ScheduleJob(cancellationToken);
+            _expression = CronExpression.Parse(expression ?? throw new ArgumentNullException(nameof(expression)), includeSeconds ? CronFormat.IncludeSeconds : CronFormat.Standard);
+            _timeZoneInfo = timeZoneInfo ?? throw new ArgumentNullException(nameof(timeZoneInfo));
+            _includeSeconds = includeSeconds;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger)); ;
         }
 
 
-        protected virtual async Task ScheduleJob(CancellationToken cancellationToken)
+        protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var next = _expression.GetNextOccurrence(DateTimeOffset.Now, _timeZoneInfo,_includeSeconds);
+            return ScheduleJob(stoppingToken);
+        }
 
-            if (next.HasValue)
+
+#if NET6_0_OR_GREATER
+        private async Task ScheduleJob(CancellationToken cancellationToken)
+        {
+            DateTimeOffset? next = _expression.GetNextOccurrence(DateTimeOffset.UtcNow, _timeZoneInfo);
+
+            while (next.HasValue && !cancellationToken.IsCancellationRequested)
+            {
+                var delay = next.Value - DateTimeOffset.UtcNow;
+
+                _logger.LogInformation("Next work {nexttxt} [{delaytxt}]",next.Value.ToString("T"), delay.ToString(@"hh\:mm\:ss"));
+
+                //TODO: Si delay.TotalMiliseconds < 0
+
+
+                using PeriodicTimer timer = new PeriodicTimer(delay);
+
+
+                if (await timer.WaitForNextTickAsync(cancellationToken))
+                    await DoWork(cancellationToken);
+
+                next = _expression.GetNextOccurrence(DateTimeOffset.UtcNow, _timeZoneInfo);
+            }
+
+        }
+
+
+
+
+#else
+
+
+
+        private async Task ScheduleJob(CancellationToken cancellationToken)
+        {
+            var next = _expression.GetNextOccurrence(DateTimeOffset.UtcNow, _timeZoneInfo, _includeSeconds);
+
+            if (next.HasValue && !cancellationToken.IsCancellationRequested)
             {
 
-                var delay = next.Value - DateTimeOffset.Now;
+                var delay = next.Value - DateTimeOffset.UtcNow;
 
                 if (delay.TotalMilliseconds <= 0)
                 {
                     await ScheduleJob(cancellationToken);
+                    return;
                 }
 
                 _timer = new System.Timers.Timer(delay.TotalMilliseconds);
@@ -61,20 +94,21 @@ namespace ScheduleCronJobs.Services
 
             await Task.CompletedTask;
         }
+#endif
+
+
 
         protected abstract Task DoWork(CancellationToken cancellationToken);
 
-        public virtual Task StopAsync(CancellationToken cancellationToken)
+
+        public override void Dispose()
         {
             _timer?.Dispose();
-            return Task.CompletedTask;
+            base.Dispose();
         }
 
-        public void Dispose()
-        {
-            _timer?.Dispose();
-            GC.SuppressFinalize(this);
-        }
+
+
 
 
     }
